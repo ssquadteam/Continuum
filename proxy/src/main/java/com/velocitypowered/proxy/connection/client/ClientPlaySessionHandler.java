@@ -672,7 +672,7 @@ public class ClientPlaySessionHandler implements MinecraftSessionHandler {
     }
 
     destination.setEntityId(joinGame.getEntityId()); // used for sound api
-    if (player.getProtocolVersion().noLessThan(ProtocolVersion.MINECRAFT_1_20_2)) {
+    if (false && player.getProtocolVersion().noLessThan(ProtocolVersion.MINECRAFT_1_20_2)) {
       player.getBossBarManager().sendBossBars();
     } else {
       // Remove previous boss bars. These don't get cleared when sending JoinGame (up until 1.20.2),

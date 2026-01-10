@@ -31,6 +31,7 @@ public final class BossBarManager {
 
   private final ConnectedPlayer player;
   private final Set<VelocityBossBarImplementation> bossBars = new HashSet<>();
+  private final Set<VelocityBossBarImplementation> barsToRemove = new HashSet<>();
 
   private boolean dropPackets = false;
 

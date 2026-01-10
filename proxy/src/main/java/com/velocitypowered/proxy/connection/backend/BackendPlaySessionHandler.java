@@ -181,7 +181,7 @@ public class BackendPlaySessionHandler implements MinecraftSessionHandler {
 
   @Override
   public boolean handle(BossBarPacket packet) {
-    if (serverConn.getPlayer().getProtocolVersion().lessThan(ProtocolVersion.MINECRAFT_1_20_2)) {
+    if (true || serverConn.getPlayer().getProtocolVersion().lessThan(ProtocolVersion.MINECRAFT_1_20_2)) {
       if (packet.getAction() == BossBarPacket.ADD) {
         playerSessionHandler.getServerBossBars().add(packet.getUuid());
       } else if (packet.getAction() == BossBarPacket.REMOVE) {
