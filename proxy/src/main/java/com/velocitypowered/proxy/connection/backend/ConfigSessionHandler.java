@@ -65,7 +65,6 @@ import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import java.net.InetSocketAddress;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import net.kyori.adventure.key.Key;
@@ -87,7 +86,7 @@ public class ConfigSessionHandler implements MinecraftSessionHandler {
 
   private ResourcePackInfo resourcePackToApply;
 
-  private State state;
+  private final State state;
 
   /**
    * Creates the new transition handler.
@@ -179,7 +178,7 @@ public class ConfigSessionHandler implements MinecraftSessionHandler {
           if (serverConn.getConnection() != null) {
             // We can technically skip these first 2 states, however, for conformity to normal state flow expectations...
             serverConn.getConnection().write(new ResourcePackResponsePacket(
-                    packet.getId(), packet.getHash(), PlayerResourcePackStatusEvent.Status.ACCEPTED));
+                packet.getId(), packet.getHash(), PlayerResourcePackStatusEvent.Status.ACCEPTED));
             serverConn.getConnection().write(new ResourcePackResponsePacket(
                 packet.getId(), packet.getHash(), PlayerResourcePackStatusEvent.Status.DOWNLOADED));
             serverConn.getConnection().write(new ResourcePackResponsePacket(
@@ -187,7 +186,7 @@ public class ConfigSessionHandler implements MinecraftSessionHandler {
           }
           if (modifiedPack) {
             logger.warn("A plugin has tried to modify a ResourcePack provided by the backend server "
-                    + "with a ResourcePack already applied, the applying of the resource pack will be skipped.");
+                + "with a ResourcePack already applied, the applying of the resource pack will be skipped.");
           }
         } else {
           resourcePackToApply = null;
@@ -195,12 +194,12 @@ public class ConfigSessionHandler implements MinecraftSessionHandler {
         }
       } else if (serverConn.getConnection() != null) {
         serverConn.getConnection().write(new ResourcePackResponsePacket(
-                packet.getId(), packet.getHash(), PlayerResourcePackStatusEvent.Status.DECLINED));
+            packet.getId(), packet.getHash(), PlayerResourcePackStatusEvent.Status.DECLINED));
       }
     }, playerConnection.eventLoop()).exceptionally((ex) -> {
       if (serverConn.getConnection() != null) {
         serverConn.getConnection().write(new ResourcePackResponsePacket(
-                packet.getId(), packet.getHash(), PlayerResourcePackStatusEvent.Status.DECLINED));
+            packet.getId(), packet.getHash(), PlayerResourcePackStatusEvent.Status.DECLINED));
       }
       logger.error("Exception while handling resource pack send for {}", playerConnection, ex);
       return null;
@@ -214,7 +213,7 @@ public class ConfigSessionHandler implements MinecraftSessionHandler {
     final MinecraftConnection playerConnection = this.serverConn.getPlayer().getConnection();
 
     final ServerResourcePackRemoveEvent event = new ServerResourcePackRemoveEvent(
-            packet.getId(), this.serverConn);
+        packet.getId(), this.serverConn);
     server.getEventManager().fire(event).thenAcceptAsync(serverResourcePackRemoveEvent -> {
       if (playerConnection.isClosed()) {
         return;
@@ -297,7 +296,7 @@ public class ConfigSessionHandler implements MinecraftSessionHandler {
                   pme.getIdentifier().getId(), Unpooled.wrappedBuffer(bytes)));
             }
             this.serverConn.getConnection().setAutoReading(true);
-          },  serverConn.ensureConnected().eventLoop()).exceptionally((ex) -> {
+          }, serverConn.ensureConnected().eventLoop()).exceptionally((ex) -> {
             logger.error("Exception while handling plugin message {}", packet, ex);
             return null;
           });
@@ -321,17 +320,17 @@ public class ConfigSessionHandler implements MinecraftSessionHandler {
       return true;
     }
     this.server.getEventManager()
-            .fire(new PreTransferEvent(this.serverConn.getPlayer(), originalAddress))
-            .thenAcceptAsync(event -> {
-              if (event.getResult().isAllowed()) {
-                InetSocketAddress resultedAddress = event.getResult().address();
-                if (resultedAddress == null) {
-                  resultedAddress = originalAddress;
-                }
-                serverConn.getPlayer().getConnection().write(new TransferPacket(
-                        resultedAddress.getHostName(), resultedAddress.getPort()));
-              }
-            }, serverConn.ensureConnected().eventLoop());
+        .fire(new PreTransferEvent(this.serverConn.getPlayer(), originalAddress))
+        .thenAcceptAsync(event -> {
+          if (event.getResult().isAllowed()) {
+            InetSocketAddress resultedAddress = event.getResult().address();
+            if (resultedAddress == null) {
+              resultedAddress = originalAddress;
+            }
+            serverConn.getPlayer().getConnection().write(new TransferPacket(
+                resultedAddress.getHostName(), resultedAddress.getPort()));
+          }
+        }, serverConn.ensureConnected().eventLoop());
     return true;
   }
 
@@ -348,10 +347,10 @@ public class ConfigSessionHandler implements MinecraftSessionHandler {
       );
       serverConn.ensureConnected().write(
           new KnownPacksPacket(
-              Arrays.stream(packet.getPacks())
+              packet.getPacks().stream()
                   .distinct()
                   .filter(clientPacks::contains)
-                  .toArray(KnownPacksPacket.KnownPack[]::new)
+                  .toList()
           )
       );
       return true;

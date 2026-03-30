@@ -25,7 +25,7 @@ import com.velocitypowered.proxy.util.except.QuietDecoderException;
 import io.netty.buffer.ByteBuf;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -36,6 +36,14 @@ public class KnownPacksPacket implements MinecraftPacket {
         new QuietDecoderException("too many known packs");
 
     private List<KnownPack> packs;
+
+    public  KnownPacksPacket() {
+      this.packs = new ArrayList<>();
+    }
+
+    public KnownPacksPacket(List<KnownPack> packs) {
+      this.packs = packs;
+    }
 
     @Override
     public void decode(ByteBuf buf, ProtocolUtils.Direction direction,

@@ -844,8 +844,7 @@ public enum StateRegistry {
           map(0x7B, MINECRAFT_1_21, false),
           map(0x82, MINECRAFT_1_21_2, false),
           map(0x87, MINECRAFT_1_21_9, false),
-          map(0x89, MINECRAFT_26_1, false),
-          map(0x87, MINECRAFT_1_21_9, false));
+          map(0x89, MINECRAFT_26_1, false));
       clientbound.register(
           ObjectivePacket.class,
           ObjectivePacket::new,
@@ -865,7 +864,8 @@ public enum StateRegistry {
           map(0x5E, MINECRAFT_1_20_5, false),
           map(0x64, MINECRAFT_1_21_2, false),
           map(0x63, MINECRAFT_1_21_5, false),
-          map(0x68, MINECRAFT_1_21_9, false));
+          map(0x68, MINECRAFT_1_21_9, false),
+          map(0x6A, MINECRAFT_26_1, false));
       clientbound.register(
           TeamPacket.class,
           TeamPacket::new,
@@ -885,7 +885,8 @@ public enum StateRegistry {
           map(0x60, MINECRAFT_1_20_5, false),
           map(0x67, MINECRAFT_1_21_2, false),
           map(0x66, MINECRAFT_1_21_5, false),
-          map(0x6B, MINECRAFT_1_21_9, false));
+          map(0x6B, MINECRAFT_1_21_9, false),
+          map(0x6D, MINECRAFT_26_1, false));
     }
   },
   LOGIN {
