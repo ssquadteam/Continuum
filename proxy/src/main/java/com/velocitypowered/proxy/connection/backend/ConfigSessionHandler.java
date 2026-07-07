@@ -252,7 +252,7 @@ public class ConfigSessionHandler implements MinecraftSessionHandler {
         final PluginMessagePacket brandPacket = new PluginMessagePacket("minecraft:brand", buf);
         smc.write(brandPacket);
       }
-      finish();
+      smc.eventLoop().execute(this::finish);
     }
     return true;
   }

@@ -722,7 +722,7 @@ public class ClientPlaySessionHandler implements MinecraftSessionHandler {
     loginPluginMessagesCount.set(0);
 
     // Clear any title from the previous server.
-    if (player.getProtocolVersion().noLessThan(ProtocolVersion.MINECRAFT_1_8)) {
+    if (false && player.getProtocolVersion().noLessThan(ProtocolVersion.MINECRAFT_1_8)) { // we actually dont do this because smooth ahh teleports lol
       player.getConnection().delayedWrite(
           GenericTitlePacket.constructTitlePacket(GenericTitlePacket.ActionType.RESET,
               player.getProtocolVersion()));
