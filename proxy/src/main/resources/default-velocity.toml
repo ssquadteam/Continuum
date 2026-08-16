@@ -12,6 +12,33 @@ motd = "<#09add3>A Velocity Server"
 # on the number of players online.)
 show-max-players = 500
 
+# If true, players stay in the play state when they switch backend servers, instead of being sent
+# back through the configuration state. This removes the "Reconfiguring..." screen and the
+# accompanying resource pack, tab list and scoreboard flicker, so switches look seamless.
+#
+# The proxy answers the backend's known-packs handshake on the client's behalf and clears the
+# scoreboard objectives, teams and boss bars left behind by the previous server itself.
+#
+# WARNING: every backend server must run the same Minecraft version. The client keeps the registry
+# data it received from the first server it joined, so a backend on a different protocol version
+# will desync the client and cause visual corruption or kicks. Leave this off if your backends are
+# not all on the same version.
+remove-reconfig = false
+
+# If true, the client keeps the world it already has when it switches backend servers, instead of
+# rebuilding it. This removes the terrain loading screen that still appears on a switch even when
+# "remove-reconfig" is on, because the proxy stops relaying the destination's join game and respawn
+# packets.
+#
+# This only works when the destination server reuses the entity id the client was already given
+# (for example AdvancedServerZones, which calls Entity#setId on arrival) and stays in the same
+# dimension. The proxy checks both on every switch and quietly falls back to the normal switch when
+# either does not hold, so turning this on can cost you nothing but never breaks a session.
+#
+# Requires "remove-reconfig" to be useful; on its own the configuration state still rebuilds the
+# client's world.
+keep-client-world-on-switch = false
+
 # Should we authenticate players with Mojang? By default, this is on.
 online-mode = true
 

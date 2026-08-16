@@ -434,6 +434,27 @@ public class MinecraftConnection extends ChannelInboundHandlerAdapter {
     }
   }
 
+  /**
+   * Adds only the inbound (backend-to-client) play packet queue handler.
+   */
+  public void addPlayPacketQueueInboundHandler() {
+    if (this.channel.pipeline().get(Connections.PLAY_PACKET_QUEUE_INBOUND) == null) {
+      this.channel.pipeline().addAfter(Connections.MINECRAFT_DECODER, Connections.PLAY_PACKET_QUEUE_INBOUND,
+           new PlayPacketQueueInboundHandler(this.protocolVersion,
+               channel.pipeline().get(MinecraftDecoder.class).getDirection()));
+    }
+  }
+
+  /**
+   * Removes the inbound (backend-to-client) play packet queue handler, flushing anything it
+   * buffered.
+   */
+  public void removePlayPacketQueueInboundHandler() {
+    if (this.channel.pipeline().get(Connections.PLAY_PACKET_QUEUE_INBOUND) != null) {
+      this.channel.pipeline().remove(Connections.PLAY_PACKET_QUEUE_INBOUND);
+    }
+  }
+
   public ProtocolVersion getProtocolVersion() {
     return protocolVersion;
   }

@@ -91,6 +91,15 @@ public class VelocityConfiguration implements ProxyConfig {
   private final Metrics metrics;
   @Expose
   private boolean enablePlayerAddressLogging = true;
+  /**
+   * Whether to keep players in the play state when they switch backend servers, instead of
+   * sending them back through the configuration state.
+   */
+  private boolean removeReconfig = false;
+  /**
+   * Whether to leave the client's loaded world in place when it switches backend servers.
+   */
+  private boolean keepClientWorldOnSwitch = false;
   private net.kyori.adventure.text.@MonotonicNonNull Component motdAsComponent;
   private @Nullable Favicon favicon;
   @Expose
@@ -111,8 +120,9 @@ public class VelocityConfiguration implements ProxyConfig {
       boolean preventClientProxyConnections, boolean announceForge,
       PlayerInfoForwarding playerInfoForwardingMode, byte[] forwardingSecret,
       boolean onlineModeKickExistingPlayers, PingPassthroughMode pingPassthrough,
-      boolean samplePlayersInPing, boolean enablePlayerAddressLogging, Servers servers,
-      ForcedHosts forcedHosts, Advanced advanced, Query query, Metrics metrics,
+      boolean samplePlayersInPing, boolean enablePlayerAddressLogging, boolean removeReconfig,
+      boolean keepClientWorldOnSwitch, Servers servers, ForcedHosts forcedHosts,
+      Advanced advanced, Query query, Metrics metrics,
       boolean forceKeyAuthentication, PacketLimiterConfig packetLimiterConfig) {
     this.bind = bind;
     this.motd = motd;
@@ -126,6 +136,8 @@ public class VelocityConfiguration implements ProxyConfig {
     this.pingPassthrough = pingPassthrough;
     this.samplePlayersInPing = samplePlayersInPing;
     this.enablePlayerAddressLogging = enablePlayerAddressLogging;
+    this.removeReconfig = removeReconfig;
+    this.keepClientWorldOnSwitch = keepClientWorldOnSwitch;
     this.servers = servers;
     this.forcedHosts = forcedHosts;
     this.advanced = advanced;
@@ -415,6 +427,28 @@ public class VelocityConfiguration implements ProxyConfig {
     return enablePlayerAddressLogging;
   }
 
+  /**
+   * Returns whether the configuration state is skipped when a player switches backend servers.
+   *
+   * <p>When enabled, players stay in the play state across server switches, which removes the
+   * "Reconfiguring..." screen. This requires every backend server to advertise the same registry
+   * data, so all backends must run the same Minecraft version.
+   *
+   * @return true if the reconfiguration stage is skipped on server switches
+   */
+  public boolean isRemoveReconfig() {
+    return removeReconfig;
+  }
+
+  /**
+   * Returns whether the client's loaded world is left in place when it switches backend servers.
+   *
+   * @return true if the client keeps its world across a server switch
+   */
+  public boolean isKeepClientWorldOnSwitch() {
+    return keepClientWorldOnSwitch;
+  }
+
   public boolean isBungeePluginChannelEnabled() {
     return advanced.isBungeePluginMessageChannel();
   }
@@ -471,6 +505,8 @@ public class VelocityConfiguration implements ProxyConfig {
         .add("query", query)
         .add("favicon", favicon)
         .add("enablePlayerAddressLogging", enablePlayerAddressLogging)
+        .add("removeReconfig", removeReconfig)
+        .add("keepClientWorldOnSwitch", keepClientWorldOnSwitch)
         .add("forceKeyAuthentication", forceKeyAuthentication)
         .add("packetLimiterConfig", packetLimiterConfig)
         .toString();
@@ -570,6 +606,8 @@ public class VelocityConfiguration implements ProxyConfig {
       final boolean kickExisting = config.getOrElse("kick-existing-players", false);
       final boolean enablePlayerAddressLogging = config.getOrElse(
               "enable-player-address-logging", true);
+      final boolean removeReconfig = config.getOrElse("remove-reconfig", false);
+      final boolean keepClientWorldOnSwitch = config.getOrElse("keep-client-world-on-switch", false);
       final PacketLimiterConfig packetLimiterConfig = PacketLimiterConfig.fromConfig(config.get("packet-limiter"));
 
       // Throw an exception if the forwarding-secret file is empty and the proxy is using a
@@ -593,6 +631,8 @@ public class VelocityConfiguration implements ProxyConfig {
               pingPassthroughMode,
               samplePlayersInPing,
               enablePlayerAddressLogging,
+              removeReconfig,
+              keepClientWorldOnSwitch,
               new Servers(serversConfig),
               new ForcedHosts(forcedHostsConfig),
               new Advanced(advancedConfig),
