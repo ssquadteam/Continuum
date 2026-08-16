@@ -46,6 +46,7 @@ import com.velocitypowered.api.permission.PermissionProvider;
 import com.velocitypowered.api.permission.Tristate;
 import com.velocitypowered.api.proxy.ConnectionRequestBuilder;
 import com.velocitypowered.api.proxy.Player;
+import com.velocitypowered.api.proxy.player.ClientWorldSwitches;
 import com.velocitypowered.api.proxy.ServerConnection;
 import com.velocitypowered.api.proxy.crypto.IdentifiedKey;
 import com.velocitypowered.api.proxy.crypto.KeyIdentifiable;
@@ -943,6 +944,7 @@ public class ConnectedPlayer implements MinecraftConnectionAssociation, Player, 
       connectedServer.disconnect();
     }
 
+    ClientWorldSwitches.forget(getUniqueId());
     Optional<Player> connectedPlayer = server.getPlayer(this.getUniqueId());
     server.unregisterConnection(this);
 

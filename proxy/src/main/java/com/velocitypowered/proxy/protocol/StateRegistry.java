@@ -47,6 +47,7 @@ import static com.velocitypowered.api.network.ProtocolVersion.MINECRAFT_1_8;
 import static com.velocitypowered.api.network.ProtocolVersion.MINECRAFT_1_9;
 import static com.velocitypowered.api.network.ProtocolVersion.MINECRAFT_1_9_4;
 import static com.velocitypowered.api.network.ProtocolVersion.MINECRAFT_26_1;
+import static com.velocitypowered.api.network.ProtocolVersion.MINECRAFT_26_2;
 import static com.velocitypowered.api.network.ProtocolVersion.MINIMUM_VERSION;
 import static com.velocitypowered.api.network.ProtocolVersion.SUPPORTED_VERSIONS;
 import static com.velocitypowered.proxy.protocol.ProtocolUtils.Direction;
@@ -63,7 +64,10 @@ import com.velocitypowered.proxy.protocol.packet.ClientboundCookieRequestPacket;
 import com.velocitypowered.proxy.protocol.packet.ClientboundSoundEntityPacket;
 import com.velocitypowered.proxy.protocol.packet.ClientboundStopSoundPacket;
 import com.velocitypowered.proxy.protocol.packet.ClientboundStoreCookiePacket;
+import com.velocitypowered.proxy.protocol.packet.ClientboundSetPassengersPacket;
 import com.velocitypowered.proxy.protocol.packet.DialogClearPacket;
+import com.velocitypowered.proxy.protocol.packet.ObjectivePacket;
+import com.velocitypowered.proxy.protocol.packet.TeamPacket;
 import com.velocitypowered.proxy.protocol.packet.DialogShowPacket;
 import com.velocitypowered.proxy.protocol.packet.DisconnectPacket;
 import com.velocitypowered.proxy.protocol.packet.EncryptionRequestPacket;
@@ -76,7 +80,6 @@ import com.velocitypowered.proxy.protocol.packet.LegacyPlayerListItemPacket;
 import com.velocitypowered.proxy.protocol.packet.LoginAcknowledgedPacket;
 import com.velocitypowered.proxy.protocol.packet.LoginPluginMessagePacket;
 import com.velocitypowered.proxy.protocol.packet.LoginPluginResponsePacket;
-import com.velocitypowered.proxy.protocol.packet.ObjectivePacket;
 import com.velocitypowered.proxy.protocol.packet.PingIdentifyPacket;
 import com.velocitypowered.proxy.protocol.packet.PluginMessagePacket;
 import com.velocitypowered.proxy.protocol.packet.RemovePlayerInfoPacket;
@@ -96,7 +99,6 @@ import com.velocitypowered.proxy.protocol.packet.StatusRequestPacket;
 import com.velocitypowered.proxy.protocol.packet.StatusResponsePacket;
 import com.velocitypowered.proxy.protocol.packet.TabCompleteRequestPacket;
 import com.velocitypowered.proxy.protocol.packet.TabCompleteResponsePacket;
-import com.velocitypowered.proxy.protocol.packet.TeamPacket;
 import com.velocitypowered.proxy.protocol.packet.TransferPacket;
 import com.velocitypowered.proxy.protocol.packet.UpsertPlayerInfoPacket;
 import com.velocitypowered.proxy.protocol.packet.chat.ChatAcknowledgementPacket;
@@ -887,6 +889,10 @@ public enum StateRegistry {
           map(0x66, MINECRAFT_1_21_5, false),
           map(0x6B, MINECRAFT_1_21_9, false),
           map(0x6D, MINECRAFT_26_1, false));
+      clientbound.register(
+          ClientboundSetPassengersPacket.class,
+          ClientboundSetPassengersPacket::new,
+          map(0x6B, MINECRAFT_26_2, false));
     }
   },
   LOGIN {

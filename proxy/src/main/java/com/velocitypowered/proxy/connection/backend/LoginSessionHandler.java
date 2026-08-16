@@ -163,7 +163,12 @@ public class LoginSessionHandler implements MinecraftSessionHandler {
       if (player.getClientSettingsPacket() != null) {
         smc.write(player.getClientSettingsPacket());
       }
-      if (!(player.getConnection().getActiveSessionHandler() instanceof ClientPlaySessionHandler)) {
+      if (player.getConnection().getActiveSessionHandler() instanceof ClientPlaySessionHandler clientPlaySessionHandler) {
+        if (!server.getConfiguration().isRemoveReconfig()) {
+          smc.setAutoReading(false);
+          clientPlaySessionHandler.doSwitch().thenRunAsync(() -> smc.setAutoReading(true), smc.eventLoop());
+        }
+      } else {
         // Initial login - the player is already in configuration state.
         server.getEventManager().fireAndForget(new PlayerEnteredConfigurationEvent(player, serverConn));
       }

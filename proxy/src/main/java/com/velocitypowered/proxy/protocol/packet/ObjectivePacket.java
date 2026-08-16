@@ -74,14 +74,12 @@ public class ObjectivePacket implements MinecraftPacket {
         numberFormat = buf.readBoolean();
         if (numberFormat) {
           switch (ProtocolUtils.readVarInt(buf)) {
-            case 0:
-              break;
-            case 1:
-              numberFormatStyled = ProtocolUtils.readBinaryTag(buf, version, BinaryTagIO.reader());
-              break;
-            case 2:
-              numberFormatFixed = ComponentHolder.read(buf, version);
-              break;
+            case 1 -> numberFormatStyled =
+                ProtocolUtils.readBinaryTag(buf, version, BinaryTagIO.reader());
+            case 2 -> numberFormatFixed = ComponentHolder.read(buf, version);
+            default -> {
+              // No extra data is sent for the blank number format.
+            }
           }
         }
       }

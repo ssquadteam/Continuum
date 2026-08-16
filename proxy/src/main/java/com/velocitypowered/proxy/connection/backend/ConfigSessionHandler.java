@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019-2023 Velocity Contributors
+ * Copyright (C) 2018-2026 Velocity Contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -37,6 +37,7 @@ import com.velocitypowered.proxy.connection.player.resourcepack.handler.Resource
 import com.velocitypowered.proxy.connection.util.ConnectionMessages;
 import com.velocitypowered.proxy.connection.util.ConnectionRequestResults;
 import com.velocitypowered.proxy.connection.util.ConnectionRequestResults.Impl;
+import com.velocitypowered.proxy.network.Connections;
 import com.velocitypowered.proxy.protocol.MinecraftPacket;
 import com.velocitypowered.proxy.protocol.ProtocolUtils;
 import com.velocitypowered.proxy.protocol.StateRegistry;
@@ -64,9 +65,12 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
+import io.netty.handler.timeout.ReadTimeoutHandler;
 import java.net.InetSocketAddress;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import net.kyori.adventure.key.Key;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -76,17 +80,30 @@ import org.apache.logging.log4j.Logger;
  * 1.20.2+ switching. Yes, some of this is exceptionally stupid.
  */
 public class ConfigSessionHandler implements MinecraftSessionHandler {
+
   private static final boolean BACKPRESSURE_LOG =
       Boolean.getBoolean("velocity.log-server-backpressure");
 
-  private static final Logger logger = LogManager.getLogger(ConfigSessionHandler.class);
+  private static final Logger LOGGER = LogManager.getLogger(ConfigSessionHandler.class);
+
+  // Advance the backend to PLAY this long after it finishes configuring, decoupling it from a client
+  // still held in config (e.g. applying a resource pack) before the backend times out. When 0 or
+  // less, advance immediately without ever holding the backend in config.
+  private static final long SPLIT_PHASE_DELAY_SECONDS =
+      Long.getLong("velocity.split-phase-delay-seconds", 9L);
+
   private final VelocityServer server;
+
   private final VelocityServerConnection serverConn;
+
   private final CompletableFuture<Impl> resultFuture;
 
   private ResourcePackInfo resourcePackToApply;
 
   private final State state;
+
+  // Guards advanceBackendToPlay; only touched on the backend event loop.
+  private boolean backendAdvancedToPlay;
 
   /**
    * Creates the new transition handler.
@@ -119,7 +136,13 @@ public class ConfigSessionHandler implements MinecraftSessionHandler {
       serverConn.disconnect();
       return true;
     }
+
     return false;
+  }
+
+  private boolean clientStayedInPlay() {
+    return !(serverConn.getPlayer().getConnection().getActiveSessionHandler()
+        instanceof ClientConfigSessionHandler);
   }
 
   @Override
@@ -130,6 +153,10 @@ public class ConfigSessionHandler implements MinecraftSessionHandler {
 
   @Override
   public boolean handle(TagsUpdatePacket packet) {
+    if (clientStayedInPlay()) {
+      return true;
+    }
+
     serverConn.getPlayer().getConnection().write(packet);
     return true;
   }
@@ -154,25 +181,26 @@ public class ConfigSessionHandler implements MinecraftSessionHandler {
   }
 
   @Override
-  public boolean handle(final ResourcePackRequestPacket packet) {
-    final MinecraftConnection playerConnection = serverConn.getPlayer().getConnection();
+  public boolean handle(ResourcePackRequestPacket packet) {
+    MinecraftConnection playerConnection = serverConn.getPlayer().getConnection();
 
-    final ResourcePackInfo resourcePackInfo = packet.toServerPromptedPack();
-    final ServerResourcePackSendEvent event =
-        new ServerResourcePackSendEvent(resourcePackInfo, this.serverConn);
+    ResourcePackInfo resourcePackInfo = packet.toServerPromptedPack();
+    ServerResourcePackSendEvent event = new ServerResourcePackSendEvent(resourcePackInfo, this.serverConn);
 
     server.getEventManager().fire(event).thenAcceptAsync(serverResourcePackSendEvent -> {
       if (playerConnection.isClosed()) {
         return;
       }
+
       if (serverResourcePackSendEvent.getResult().isAllowed()) {
-        final ResourcePackInfo toSend = serverResourcePackSendEvent.getProvidedResourcePack();
+        ResourcePackInfo toSend = serverResourcePackSendEvent.getProvidedResourcePack();
         boolean modifiedPack = false;
         if (toSend != serverResourcePackSendEvent.getReceivedResourcePack()) {
           ((VelocityResourcePackInfo) toSend).setOriginalOrigin(
               ResourcePackInfo.Origin.DOWNSTREAM_SERVER);
           modifiedPack = true;
         }
+
         if (serverConn.getPlayer().resourcePackHandler().hasPackAppliedByHash(toSend.getHash())) {
           // Do not apply a resource pack that has already been applied
           if (serverConn.getConnection() != null) {
@@ -184,9 +212,10 @@ public class ConfigSessionHandler implements MinecraftSessionHandler {
             serverConn.getConnection().write(new ResourcePackResponsePacket(
                 packet.getId(), packet.getHash(), PlayerResourcePackStatusEvent.Status.SUCCESSFUL));
           }
+
           if (modifiedPack) {
-            logger.warn("A plugin has tried to modify a ResourcePack provided by the backend server "
-                + "with a ResourcePack already applied, the applying of the resource pack will be skipped.");
+            LOGGER.warn("A plugin has tried to modify a ResourcePack provided by the backend server "
+                    + "with a ResourcePack already applied, the applying of the resource pack will be skipped.");
           }
         } else {
           resourcePackToApply = null;
@@ -194,14 +223,14 @@ public class ConfigSessionHandler implements MinecraftSessionHandler {
         }
       } else if (serverConn.getConnection() != null) {
         serverConn.getConnection().write(new ResourcePackResponsePacket(
-            packet.getId(), packet.getHash(), PlayerResourcePackStatusEvent.Status.DECLINED));
+                packet.getId(), packet.getHash(), PlayerResourcePackStatusEvent.Status.DECLINED));
       }
     }, playerConnection.eventLoop()).exceptionally((ex) -> {
       if (serverConn.getConnection() != null) {
         serverConn.getConnection().write(new ResourcePackResponsePacket(
-            packet.getId(), packet.getHash(), PlayerResourcePackStatusEvent.Status.DECLINED));
+                packet.getId(), packet.getHash(), PlayerResourcePackStatusEvent.Status.DECLINED));
       }
-      logger.error("Exception while handling resource pack send for {}", playerConnection, ex);
+      LOGGER.error("Exception while handling resource pack send for {}", playerConnection, ex);
       return null;
     });
 
@@ -210,17 +239,17 @@ public class ConfigSessionHandler implements MinecraftSessionHandler {
 
   @Override
   public boolean handle(RemoveResourcePackPacket packet) {
-    final MinecraftConnection playerConnection = this.serverConn.getPlayer().getConnection();
+    MinecraftConnection playerConnection = this.serverConn.getPlayer().getConnection();
 
-    final ServerResourcePackRemoveEvent event = new ServerResourcePackRemoveEvent(
-        packet.getId(), this.serverConn);
+    ServerResourcePackRemoveEvent event = new ServerResourcePackRemoveEvent(packet.getId(), this.serverConn);
     server.getEventManager().fire(event).thenAcceptAsync(serverResourcePackRemoveEvent -> {
       if (playerConnection.isClosed()) {
         return;
       }
+
       if (serverResourcePackRemoveEvent.getResult().isAllowed()) {
-        final ConnectedPlayer player = serverConn.getPlayer();
-        final ResourcePackHandler handler = player.resourcePackHandler();
+        ConnectedPlayer player = serverConn.getPlayer();
+        ResourcePackHandler handler = player.resourcePackHandler();
         if (packet.getId() != null) {
           handler.remove(packet.getId());
         } else {
@@ -229,31 +258,75 @@ public class ConfigSessionHandler implements MinecraftSessionHandler {
         playerConnection.write(packet);
       }
     }, playerConnection.eventLoop()).exceptionally((ex) -> {
-      logger.error("Exception while handling resource pack remove for {}", playerConnection, ex);
+      LOGGER.error("Exception while handling resource pack remove for {}", playerConnection, ex);
       return null;
     });
+
     return true;
   }
 
   @Override
   public boolean handle(FinishedUpdatePacket packet) {
-    final MinecraftConnection smc = serverConn.ensureConnected();
-    final ConnectedPlayer player = serverConn.getPlayer();
+    MinecraftConnection smc = serverConn.ensureConnected();
+    ConnectedPlayer player = serverConn.getPlayer();
 
     smc.getChannel().pipeline().get(MinecraftVarintFrameDecoder.class).setState(StateRegistry.PLAY);
     smc.getChannel().pipeline().get(MinecraftDecoder.class).setState(StateRegistry.PLAY);
-    if (player.getConnection().getActiveSessionHandler() instanceof ClientConfigSessionHandler configHandler) {
-      configHandler.handleBackendFinishUpdate(serverConn).thenRunAsync(this::finish, smc.eventLoop());
-    } else {
-      final String brand = serverConn.getPlayer().getClientBrand();
-      if (brand != null) {
-        final ByteBuf buf = Unpooled.buffer();
-        ProtocolUtils.writeString(buf, brand);
-        final PluginMessagePacket brandPacket = new PluginMessagePacket("minecraft:brand", buf);
-        smc.write(brandPacket);
+
+    if (!(player.getConnection().getActiveSessionHandler() instanceof ClientConfigSessionHandler configHandler)) {
+      // The client never left play, so it cannot report its brand again. Replay the brand we
+      // recorded on login and advance the backend without waiting on a client handshake.
+      String clientBrand = player.getClientBrand();
+      if (clientBrand != null) {
+        ByteBuf brandBuf = Unpooled.buffer();
+        ProtocolUtils.writeString(brandBuf, clientBrand);
+        smc.write(new PluginMessagePacket("minecraft:brand", brandBuf));
       }
-      smc.eventLoop().execute(this::finish);
+
+      // Deferred by a tick so the brand message is flushed before the state change.
+      smc.eventLoop().execute(() -> {
+        advanceBackendToPlay(false);
+        smc.removePlayPacketQueueInboundHandler();
+
+        if (player.resourcePackHandler().getFirstAppliedPack() == null && resourcePackToApply != null) {
+          player.resourcePackHandler().queueResourcePack(resourcePackToApply);
+        }
+      });
+
+      return true;
     }
+
+    // Start client-side configuration; may hold the player to apply a resource pack.
+    CompletableFuture<Void> clientFinished = configHandler.handleBackendFinishUpdate(serverConn);
+
+    // Advance the backend to PLAY on whichever comes first: the client finishing, or the timeout.
+    // If the timeout wins, buffer the backend's PLAY packets until the client catches up. A delay of
+    // 0 or less advances immediately, buffering from the start without holding the backend in config.
+    final ScheduledFuture<?> splitTask = SPLIT_PHASE_DELAY_SECONDS > 0
+        ? smc.eventLoop().schedule(
+            () -> advanceBackendToPlay(true), SPLIT_PHASE_DELAY_SECONDS, TimeUnit.SECONDS)
+        : null;
+    if (splitTask == null) {
+      advanceBackendToPlay(true);
+    }
+
+    clientFinished.thenRunAsync(() -> {
+      if (splitTask != null) {
+        splitTask.cancel(false);
+      }
+      // Client won the race: advance now (already in PLAY, no buffering) and drain anything the
+      // timeout may have buffered.
+      advanceBackendToPlay(false);
+      smc.removePlayPacketQueueInboundHandler();
+
+      if (player.resourcePackHandler().getFirstAppliedPack() == null && resourcePackToApply != null) {
+        player.resourcePackHandler().queueResourcePack(resourcePackToApply);
+      }
+    }, smc.eventLoop()).exceptionally(ex -> {
+      LOGGER.error("Error advancing backend {} to play for {}",
+          serverConn.getServerInfo().getName(), player.getUsername(), ex);
+      return null;
+    });
     return true;
   }
 
@@ -267,15 +340,17 @@ public class ConfigSessionHandler implements MinecraftSessionHandler {
     } else {
       serverConn.getPlayer().handleConnectionException(serverConn.getServer(), packet, true);
     }
+
     return true;
   }
 
   @Override
   public boolean handle(PluginMessagePacket packet) {
     if (PluginMessageUtil.isMcBrand(packet)) {
-      serverConn.getPlayer().getConnection().write(
-          PluginMessageUtil.rewriteMinecraftBrand(packet, server.getVersion(),
-              serverConn.getPlayer().getProtocolVersion()));
+      PluginMessagePacket rewritten = PluginMessageUtil.rewriteMinecraftBrand(packet,
+          server.getVersion(),
+          serverConn.getPlayer().getProtocolVersion());
+      serverConn.getPlayer().getConnection().write(rewritten);
     } else {
       ChannelIdentifier id = this.server.getChannelRegistrar().getFromId(packet.getChannel());
 
@@ -297,40 +372,47 @@ public class ConfigSessionHandler implements MinecraftSessionHandler {
             }
             this.serverConn.getConnection().setAutoReading(true);
           }, serverConn.ensureConnected().eventLoop()).exceptionally((ex) -> {
-            logger.error("Exception while handling plugin message {}", packet, ex);
+            LOGGER.error("Exception while handling plugin message {}", packet, ex);
             return null;
           });
     }
+
     return true;
   }
 
   @Override
   public boolean handle(RegistrySyncPacket packet) {
+    if (clientStayedInPlay()) {
+      return true;
+    }
+
     serverConn.getPlayer().getConnection().write(packet.retain());
     return true;
   }
 
   @Override
   public boolean handle(TransferPacket packet) {
-    final InetSocketAddress originalAddress = packet.address();
+    InetSocketAddress originalAddress = packet.address();
     if (originalAddress == null) {
-      logger.error("""
+      LOGGER.error("""
           Unexpected nullable address received in TransferPacket \
-          from Backend Server in Configuration State""");
+          from Backend Server in Configuration State"""
+      );
       return true;
     }
+
     this.server.getEventManager()
-        .fire(new PreTransferEvent(this.serverConn.getPlayer(), originalAddress))
-        .thenAcceptAsync(event -> {
-          if (event.getResult().isAllowed()) {
-            InetSocketAddress resultedAddress = event.getResult().address();
-            if (resultedAddress == null) {
-              resultedAddress = originalAddress;
-            }
-            serverConn.getPlayer().getConnection().write(new TransferPacket(
-                resultedAddress.getHostName(), resultedAddress.getPort()));
-          }
-        }, serverConn.ensureConnected().eventLoop());
+            .fire(new PreTransferEvent(this.serverConn.getPlayer(), originalAddress))
+            .thenAcceptAsync(event -> {
+              if (event.getResult().isAllowed()) {
+                InetSocketAddress resultedAddress = event.getResult().address();
+                if (resultedAddress == null) {
+                  resultedAddress = originalAddress;
+                }
+                serverConn.getPlayer().getConnection().write(new TransferPacket(
+                        resultedAddress.getHostName(), resultedAddress.getPort()));
+              }
+            }, serverConn.ensureConnected().eventLoop());
     return true;
   }
 
@@ -364,9 +446,9 @@ public class ConfigSessionHandler implements MinecraftSessionHandler {
         .fire(new CookieStoreEvent(serverConn.getPlayer(), packet.getKey(), packet.getPayload()))
         .thenAcceptAsync(event -> {
           if (event.getResult().isAllowed()) {
-            final Key resultedKey = event.getResult().getKey() == null
+            Key resultedKey = event.getResult().getKey() == null
                 ? event.getOriginalKey() : event.getResult().getKey();
-            final byte[] resultedData = event.getResult().getData() == null
+            byte[] resultedData = event.getResult().getData() == null
                 ? event.getOriginalData() : event.getResult().getData();
 
             serverConn.getPlayer().getConnection()
@@ -382,9 +464,8 @@ public class ConfigSessionHandler implements MinecraftSessionHandler {
     server.getEventManager().fire(new CookieRequestEvent(serverConn.getPlayer(), packet.getKey()))
         .thenAcceptAsync(event -> {
           if (event.getResult().isAllowed()) {
-            final Key resultedKey = event.getResult().getKey() == null
+            Key resultedKey = event.getResult().getKey() == null
                 ? event.getOriginalKey() : event.getResult().getKey();
-
             serverConn.getPlayer().getConnection().write(new ClientboundCookieRequestPacket(resultedKey));
           }
         }, serverConn.ensureConnected().eventLoop());
@@ -396,6 +477,44 @@ public class ConfigSessionHandler implements MinecraftSessionHandler {
   public boolean handle(CodeOfConductPacket packet) {
     this.serverConn.getPlayer().getConnection().write(packet.retain());
     return true;
+  }
+
+  /**
+   * Acknowledges the backend and advances it to PLAY, decoupled from the client. Runs at most once.
+   *
+   * @param buffer whether to buffer the backend's inbound PLAY packets until the client enters PLAY
+   */
+  private void advanceBackendToPlay(boolean buffer) {
+    MinecraftConnection smc = serverConn.getConnection();
+    if (backendAdvancedToPlay || smc == null || smc.isClosed()) {
+      return;
+    }
+    backendAdvancedToPlay = true;
+
+    ConnectedPlayer player = serverConn.getPlayer();
+
+    smc.write(FinishedUpdatePacket.INSTANCE);
+    if (serverConn == player.getConnectedServer()) {
+      smc.setActiveSessionHandler(StateRegistry.PLAY);
+      player.sendPlayerListHeaderAndFooter(player.getPlayerListHeader(), player.getPlayerListFooter());
+      // The client cleared the tab list. TODO: Restore changes done via TabList API
+      player.getTabList().clearAllSilent();
+    } else {
+      smc.setActiveSessionHandler(StateRegistry.PLAY, new TransitionSessionHandler(server, serverConn, resultFuture));
+    }
+
+    // Must follow setActiveSessionHandler: switching to PLAY strips any inbound queue handler.
+    if (buffer) {
+      smc.addPlayPacketQueueInboundHandler();
+
+      // Swap the short login read-timeout for the in-play one now; otherwise a quiet backend could
+      // be dropped before the deferred JoinGame processing does the swap.
+      final var backendPipeline = smc.getChannel().pipeline();
+      if (backendPipeline.context(Connections.READ_TIMEOUT) != null) {
+        backendPipeline.replace(Connections.READ_TIMEOUT, Connections.READ_TIMEOUT,
+            new ReadTimeoutHandler(server.getConfiguration().getReadTimeout(), TimeUnit.MILLISECONDS));
+      }
+    }
   }
 
   @Override
@@ -416,9 +535,9 @@ public class ConfigSessionHandler implements MinecraftSessionHandler {
 
     if (BACKPRESSURE_LOG) {
       if (writable) {
-        logger.info("{} is writable, will auto-read player connection data", this.serverConn);
+        LOGGER.info("{} is writable, will auto-read player connection data", this.serverConn);
       } else {
-        logger.info("{} is not writable, not auto-reading player connection data", this.serverConn);
+        LOGGER.info("{} is not writable, not auto-reading player connection data", this.serverConn);
       }
     }
 
@@ -426,34 +545,26 @@ public class ConfigSessionHandler implements MinecraftSessionHandler {
   }
 
   private void switchFailure(Throwable cause) {
-    logger.error("Unable to switch to new server {} for {}", serverConn.getServerInfo().getName(),
+    LOGGER.error("Unable to switch to new server {} for {}", serverConn.getServerInfo().getName(),
         serverConn.getPlayer().getUsername(), cause);
     serverConn.getPlayer().disconnect(ConnectionMessages.INTERNAL_SERVER_CONNECTION_ERROR);
     resultFuture.completeExceptionally(cause);
   }
 
-  private void finish() {
-    final MinecraftConnection smc = serverConn.ensureConnected();
-    final ConnectedPlayer player = serverConn.getPlayer();
-
-    smc.write(FinishedUpdatePacket.INSTANCE);
-    if (serverConn == player.getConnectedServer()) {
-      smc.setActiveSessionHandler(StateRegistry.PLAY);
-      player.sendPlayerListHeaderAndFooter(player.getPlayerListHeader(), player.getPlayerListFooter());
-      // The client cleared the tab list. TODO: Restore changes done via TabList API
-      player.getTabList().clearAllSilent();
-    } else {
-      smc.setActiveSessionHandler(StateRegistry.PLAY, new TransitionSessionHandler(server, serverConn, resultFuture));
-    }
-    if (player.resourcePackHandler().getFirstAppliedPack() == null && resourcePackToApply != null) {
-      player.resourcePackHandler().queueResourcePack(resourcePackToApply);
-    }
+  /**
+   * Gets the current state of the configuration session.
+   *
+   * @return the current {@link State} of this configuration handler
+   */
+  public State getState() {
+    return state;
   }
 
-  /**
-   * Represents the state of the configuration stage.
-   */
   public enum State {
-    START, NEGOTIATING, PLUGIN_MESSAGE_INTERRUPT, RESOURCE_PACK_INTERRUPT, COMPLETE
+    START,
+    NEGOTIATING,
+    PLUGIN_MESSAGE_INTERRUPT,
+    RESOURCE_PACK_INTERRUPT,
+    COMPLETE
   }
 }

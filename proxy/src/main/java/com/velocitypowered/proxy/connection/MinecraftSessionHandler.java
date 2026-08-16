@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2023 Velocity Contributors
+ * Copyright (C) 2018-2026 Velocity Contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,6 +23,7 @@ import com.velocitypowered.proxy.protocol.packet.BossBarPacket;
 import com.velocitypowered.proxy.protocol.packet.BundleDelimiterPacket;
 import com.velocitypowered.proxy.protocol.packet.ClientSettingsPacket;
 import com.velocitypowered.proxy.protocol.packet.ClientboundCookieRequestPacket;
+import com.velocitypowered.proxy.protocol.packet.ClientboundSetPassengersPacket;
 import com.velocitypowered.proxy.protocol.packet.ClientboundSoundEntityPacket;
 import com.velocitypowered.proxy.protocol.packet.ClientboundStopSoundPacket;
 import com.velocitypowered.proxy.protocol.packet.ClientboundStoreCookiePacket;
@@ -100,39 +101,30 @@ public interface MinecraftSessionHandler {
   }
 
   default void handleGeneric(MinecraftPacket packet) {
-
   }
 
   default void handleUnknown(ByteBuf buf) {
-
   }
 
   default void connected() {
-
   }
 
   default void disconnected() {
-
   }
 
   default void activated() {
-
   }
 
   default void deactivated() {
-
   }
 
   default void exception(Throwable throwable) {
-
   }
 
   default void writabilityChanged() {
-
   }
 
   default void readCompleted() {
-
   }
 
   default boolean handle(AvailableCommandsPacket commands) {
@@ -351,6 +343,10 @@ public interface MinecraftSessionHandler {
     return false;
   }
 
+
+
+
+
   default boolean handle(TransferPacket transfer) {
     return false;
   }
@@ -364,6 +360,10 @@ public interface MinecraftSessionHandler {
   }
 
   default boolean handle(ClientboundCookieRequestPacket packet) {
+    return false;
+  }
+
+  default boolean handle(ClientboundSetPassengersPacket packet) {
     return false;
   }
 

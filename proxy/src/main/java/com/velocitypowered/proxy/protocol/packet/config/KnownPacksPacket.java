@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 Velocity Contributors
+ * Copyright (C) 2018-2026 Velocity Contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,59 +23,53 @@ import com.velocitypowered.proxy.protocol.MinecraftPacket;
 import com.velocitypowered.proxy.protocol.ProtocolUtils;
 import com.velocitypowered.proxy.util.except.QuietDecoderException;
 import io.netty.buffer.ByteBuf;
-import org.jetbrains.annotations.NotNull;
-
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 
 public class KnownPacksPacket implements MinecraftPacket {
 
-    private static final int MAX_LENGTH_PACKS = Integer.getInteger("velocity.max-known-packs", 64);
-    private static final QuietDecoderException TOO_MANY_PACKS =
-        new QuietDecoderException("too many known packs");
+  private static final int MAX_LENGTH_PACKS = Integer.getInteger("velocity.max-known-packs", 64);
 
-    private List<KnownPack> packs;
+  private static final QuietDecoderException TOO_MANY_PACKS = new QuietDecoderException("too many known packs");
 
-    public  KnownPacksPacket() {
-      this.packs = new ArrayList<>();
+  private List<KnownPack> packs;
+
+  public KnownPacksPacket() {
+    this.packs = List.of();
+  }
+
+  public KnownPacksPacket(List<KnownPack> packs) {
+    this.packs = packs;
+  }
+
+  @Override
+  public void decode(ByteBuf buf, ProtocolUtils.Direction direction, ProtocolVersion protocolVersion) {
+    int packCount = ProtocolUtils.readVarInt(buf);
+    if (direction == ProtocolUtils.Direction.SERVERBOUND && packCount > MAX_LENGTH_PACKS) {
+      throw TOO_MANY_PACKS;
     }
 
-    public KnownPacksPacket(List<KnownPack> packs) {
-      this.packs = packs;
+    List<KnownPack> packs = ProtocolUtils.newList(packCount);
+
+    for (int i = 0; i < packCount; i++) {
+      packs.add(KnownPack.read(buf));
     }
 
-    @Override
-    public void decode(ByteBuf buf, ProtocolUtils.Direction direction,
-                       ProtocolVersion protocolVersion) {
-        final int packCount = ProtocolUtils.readVarInt(buf);
-        if (direction == ProtocolUtils.Direction.SERVERBOUND && packCount > MAX_LENGTH_PACKS) {
-          throw TOO_MANY_PACKS;
-        }
+    this.packs = packs;
+  }
 
-        final List<KnownPack> packs = ProtocolUtils.newList(packCount);
+  @Override
+  public void encode(ByteBuf buf, ProtocolUtils.Direction direction, ProtocolVersion protocolVersion) {
+    ProtocolUtils.writeVarInt(buf, packs.size());
 
-        for (int i = 0; i < packCount; i++) {
-            packs.add(KnownPack.read(buf));
-        }
-
-        this.packs = packs;
+    for (KnownPack pack : packs) {
+      pack.write(buf);
     }
+  }
 
-    @Override
-    public void encode(ByteBuf buf, ProtocolUtils.Direction direction,
-                       ProtocolVersion protocolVersion) {
-        ProtocolUtils.writeVarInt(buf, packs.size());
-
-        for (KnownPack pack : packs) {
-            pack.write(buf);
-        }
-    }
-
-    @Override
-    public boolean handle(MinecraftSessionHandler handler) {
-        return handler.handle(this);
-    }
+  @Override
+  public boolean handle(MinecraftSessionHandler handler) {
+    return handler.handle(this);
+  }
 
   public List<KnownPack> getPacks() {
     return packs;
@@ -83,42 +77,20 @@ public class KnownPacksPacket implements MinecraftPacket {
 
   @Override
   public String toString() {
-    return "KnownPacksPacket{" +
-        "packs=" + packs +
-        '}';
+    return "KnownPacksPacket{"
+        + "packs=" + packs
+        + '}';
   }
 
-    public record KnownPack(String namespace, String id, String version) {
-        private static KnownPack read(ByteBuf buf) {
-            return new KnownPack(ProtocolUtils.readString(buf), ProtocolUtils.readString(buf), ProtocolUtils.readString(buf));
-        }
-
-        private void write(ByteBuf buf) {
-            ProtocolUtils.writeString(buf, namespace);
-            ProtocolUtils.writeString(buf, id);
-            ProtocolUtils.writeString(buf, version);
-        }
-
-      @Override
-      public boolean equals(Object o) {
-        if (o == null || getClass() != o.getClass()) return false;
-        KnownPack knownPack = (KnownPack) o;
-        return Objects.equals(id, knownPack.id) && Objects.equals(version, knownPack.version) && Objects.equals(namespace, knownPack.namespace);
-      }
-
-      @Override
-      public int hashCode() {
-        return Objects.hash(namespace, id, version);
-      }
-
-      @Override
-      @NotNull
-      public String toString() {
-        return "KnownPack{" +
-            "namespace='" + namespace + '\'' +
-            ", id='" + id + '\'' +
-            ", version='" + version + '\'' +
-            '}';
-      }
+  public record KnownPack(String namespace, String id, String version) {
+    private static KnownPack read(ByteBuf buf) {
+      return new KnownPack(ProtocolUtils.readString(buf), ProtocolUtils.readString(buf), ProtocolUtils.readString(buf));
     }
+
+    private void write(ByteBuf buf) {
+      ProtocolUtils.writeString(buf, namespace);
+      ProtocolUtils.writeString(buf, id);
+      ProtocolUtils.writeString(buf, version);
+    }
+  }
 }

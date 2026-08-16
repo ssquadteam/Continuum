@@ -62,7 +62,7 @@ public interface CommandHandler<T extends MinecraftPacket> {
               invocationInfo);
       player.getChatQueue().queuePacket(
         newLastSeenMessages -> eventFuture
-            .thenComposeAsync(event -> futurePacketCreator.apply(event, newLastSeenMessages))
+            .thenCompose(event -> futurePacketCreator.apply(event, newLastSeenMessages))
             .thenApply(pkt -> {
               if (server.getConfiguration().isLogCommandExecutions()) {
                 logger.info("{} -> executed command /{}", player, message);
