@@ -560,6 +560,9 @@ public class ConfigSessionHandler implements MinecraftSessionHandler {
     return state;
   }
 
+  /**
+   * The state of the configuration session with a backend server.
+   */
   public enum State {
     START,
     NEGOTIATING,
