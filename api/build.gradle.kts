@@ -57,6 +57,10 @@ tasks {
     withType<Javadoc> {
         exclude("com/velocitypowered/api/plugin/ap/**")
 
+        // The links below are fetched from third-party sites while javadoc runs, so one of
+        // them being briefly unreachable would otherwise fail the whole build.
+        isFailOnError = false
+
         val o = options as StandardJavadocDocletOptions
         o.encoding = "UTF-8"
         o.source = "25"
