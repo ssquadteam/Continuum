@@ -1,6 +1,6 @@
 # Merges PaperMC Velocity dev/4.0.0 into Continuum and opens a pull request when the result builds.
 #
-# Nothing is ever pushed to main. A clean, building merge becomes a PR; a conflicted or broken
+# Nothing is ever pushed to the default branch. A clean, building merge becomes a PR; a conflicted or broken
 # merge becomes an issue naming what went wrong. Both are reused across runs rather than piling up.
 
 name: Upstream Sync
@@ -31,10 +31,10 @@ jobs:
       pull-requests: write
       issues: write
     steps:
-      - name: Checkout main
+      - name: Checkout dev/4.0.0
         uses: actions/checkout@v7
         with:
-          ref: main
+          ref: dev/4.0.0
           fetch-depth: 0
 
       - name: Fetch upstream
@@ -107,14 +107,14 @@ jobs:
             exit 0
           fi
 
-          SUMMARY="Merges [\`$UPSTREAM_REF\`](https://github.com/GemstoneGG/Velocity-CTD/commits/$UPSTREAM_REF) at \`${{ steps.fetch.outputs.sha }}\`, ${{ steps.fetch.outputs.behind }} commits ahead of main.
+          SUMMARY="Merges [\`$UPSTREAM_REF\`](https://github.com/GemstoneGG/Velocity-CTD/commits/$UPSTREAM_REF) at \`${{ steps.fetch.outputs.sha }}\`, ${{ steps.fetch.outputs.behind }} commits ahead of the default branch.
 
           The merge applied cleanly and \`./gradlew build\` passed on the result.
 
           Worth a look before merging: ApiaryProxy carries branding, the \`remove-reconfig\` and \`keep-client-world-on-switch\` options, and its own workflows. A clean merge does not prove upstream did not change behaviour underneath those."
 
           if gh pr create \
-              --base main \
+              --base dev/4.0.0 \
               --head "$SYNC_BRANCH" \
               --title "Merge Velocity-CTD $UPSTREAM_REF (${{ steps.fetch.outputs.short }})" \
               --body "$SUMMARY"; then
@@ -131,7 +131,7 @@ jobs:
 
           Actions is not allowed to open pull requests on this account, so the merge is waiting on the \`$SYNC_BRANCH\` branch:
 
-          ${{ github.server_url }}/${{ github.repository }}/compare/main...$SYNC_BRANCH?expand=1
+          ${{ github.server_url }}/${{ github.repository }}/compare/dev/4.0.0...$SYNC_BRANCH?expand=1
 
           Turning on *Settings -> Actions -> General -> Allow GitHub Actions to create and approve pull requests* lets this open the pull request directly."
 
@@ -166,7 +166,7 @@ jobs:
           \`\`\`bash
           git remote add ctd $UPSTREAM_URL   # once
           git fetch ctd $UPSTREAM_REF
-          git checkout -b $SYNC_BRANCH main
+          git checkout -b $SYNC_BRANCH dev/4.0.0
           git merge FETCH_HEAD
           \`\`\`"
           else
