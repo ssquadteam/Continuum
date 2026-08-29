@@ -26,6 +26,9 @@ public class Connections {
   public static final String CIPHER_ENCODER = "cipher-encoder";
   public static final String COMPRESSION_DECODER = "compression-decoder";
   public static final String COMPRESSION_ENCODER = "compression-encoder";
+  public static final String BANDWIDTH_INBOUND = "bandwidth-inbound";
+  public static final String BANDWIDTH_OUTBOUND = "bandwidth-outbound";
+  public static final String FLUSH_CONSOLIDATION = "flush-consolidation";
   public static final String FLOW_HANDLER = "flow-handler";
   public static final String FRAME_DECODER = "frame-decoder";
   public static final String FRAME_ENCODER = "frame-encoder";

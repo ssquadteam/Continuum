@@ -98,7 +98,7 @@ public final class VelocityCommand {
         .build();
 
     final List<LiteralCommandNode<CommandSource>> commands = List
-            .of(dump, heap, info, plugins, reload);
+            .of(dump, heap, info, plugins, reload, CompressionCommand.create(server));
     return new BrigadierCommand(
       commands.stream()
         .reduce(

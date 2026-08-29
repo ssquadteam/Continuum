@@ -227,7 +227,7 @@ public class VelocityConfiguration implements ProxyConfig {
       valid = false;
     }
 
-    if (advanced.compressionLevel < -1 || advanced.compressionLevel > 9) {
+    if (advanced.compressionLevel < -1 || advanced.compressionLevel > 12) {
       logger.error("Invalid compression level {}", advanced.compressionLevel);
       valid = false;
     } else if (advanced.compressionLevel == 0) {
@@ -236,11 +236,23 @@ public class VelocityConfiguration implements ProxyConfig {
     }
 
     if (advanced.compressionThreshold < -1) {
-      logger.error("Invalid compression threshold {}", advanced.compressionLevel);
+      logger.error("Invalid compression threshold {}", advanced.compressionThreshold);
       valid = false;
     } else if (advanced.compressionThreshold == 0) {
       logger.warn("ALL packets going through the proxy will be compressed. This will compromise "
           + "throughput and increase CPU usage!");
+    }
+
+    if (advanced.flushConsolidationThreshold < 1) {
+      logger.error("flush-consolidation-threshold must be >= 1, got {}",
+          advanced.flushConsolidationThreshold);
+      valid = false;
+    }
+
+    if (advanced.compressBoundHeadroom < 0) {
+      logger.error("compress-bound-headroom must be >= 0, got {}",
+          advanced.compressBoundHeadroom);
+      valid = false;
     }
 
     if (advanced.loginRatelimit < 0) {
@@ -347,6 +359,26 @@ public class VelocityConfiguration implements ProxyConfig {
   @Override
   public int getCompressionLevel() {
     return advanced.getCompressionLevel();
+  }
+
+  public boolean isFlushConsolidationEnabled() {
+    return advanced.isFlushConsolidationEnabled();
+  }
+
+  public int getFlushConsolidationThreshold() {
+    return advanced.getFlushConsolidationThreshold();
+  }
+
+  public int getCompressBoundHeadroom() {
+    return advanced.getCompressBoundHeadroom();
+  }
+
+  public boolean isCompressionStatsEnabled() {
+    return advanced.isCompressionStatsEnabled();
+  }
+
+  public boolean isPacketBandwidthStatsEnabled() {
+    return advanced.isPacketBandwidthStatsEnabled();
   }
 
   @Override
@@ -789,9 +821,19 @@ public class VelocityConfiguration implements ProxyConfig {
   private static class Advanced {
 
     @Expose
-    private int compressionThreshold = 256;
+    private int compressionThreshold = 128;
     @Expose
     private int compressionLevel = -1;
+    @Expose
+    private boolean flushConsolidationEnabled = true;
+    @Expose
+    private int flushConsolidationThreshold = 256;
+    @Expose
+    private int compressBoundHeadroom = 16;
+    @Expose
+    private boolean compressionStatsEnabled = true;
+    @Expose
+    private boolean packetBandwidthStatsEnabled = true;
     @Expose
     private int loginRatelimit = 3000;
     @Expose
@@ -834,8 +876,13 @@ public class VelocityConfiguration implements ProxyConfig {
 
     private Advanced(CommentedConfig config) {
       if (config != null) {
-        this.compressionThreshold = config.getIntOrElse("compression-threshold", 256);
+        this.compressionThreshold = config.getIntOrElse("compression-threshold", 128);
         this.compressionLevel = config.getIntOrElse("compression-level", -1);
+        this.flushConsolidationEnabled = config.getOrElse("flush-consolidation-enabled", true);
+        this.flushConsolidationThreshold = config.getIntOrElse("flush-consolidation-threshold", 256);
+        this.compressBoundHeadroom = config.getIntOrElse("compress-bound-headroom", 16);
+        this.compressionStatsEnabled = config.getOrElse("compression-stats-enabled", true);
+        this.packetBandwidthStatsEnabled = config.getOrElse("packet-bandwidth-stats-enabled", true);
         this.loginRatelimit = config.getIntOrElse("login-ratelimit", 3000);
         this.connectionTimeout = config.getIntOrElse("connection-timeout", 5000);
         this.readTimeout = config.getIntOrElse("read-timeout", 30000);
@@ -868,6 +915,26 @@ public class VelocityConfiguration implements ProxyConfig {
 
     public int getCompressionLevel() {
       return compressionLevel;
+    }
+
+    public boolean isFlushConsolidationEnabled() {
+      return flushConsolidationEnabled;
+    }
+
+    public int getFlushConsolidationThreshold() {
+      return flushConsolidationThreshold;
+    }
+
+    public int getCompressBoundHeadroom() {
+      return compressBoundHeadroom;
+    }
+
+    public boolean isCompressionStatsEnabled() {
+      return compressionStatsEnabled;
+    }
+
+    public boolean isPacketBandwidthStatsEnabled() {
+      return packetBandwidthStatsEnabled;
     }
 
     public int getLoginRatelimit() {
@@ -951,6 +1018,11 @@ public class VelocityConfiguration implements ProxyConfig {
       return "Advanced{"
           + "compressionThreshold=" + compressionThreshold
           + ", compressionLevel=" + compressionLevel
+          + ", flushConsolidationEnabled=" + flushConsolidationEnabled
+          + ", flushConsolidationThreshold=" + flushConsolidationThreshold
+          + ", compressBoundHeadroom=" + compressBoundHeadroom
+          + ", compressionStatsEnabled=" + compressionStatsEnabled
+          + ", packetBandwidthStatsEnabled=" + packetBandwidthStatsEnabled
           + ", loginRatelimit=" + loginRatelimit
           + ", connectionTimeout=" + connectionTimeout
           + ", readTimeout=" + readTimeout
