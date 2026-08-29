@@ -64,7 +64,7 @@ jobs:
           git checkout -B "$SYNC_BRANCH"
 
           if git merge --no-edit --no-ff FETCH_HEAD \
-              -m "Merge Velocity-CTD $UPSTREAM_REF at ${{ steps.fetch.outputs.short }}"; then
+              -m "Merge PaperMC Velocity $UPSTREAM_REF at ${{ steps.fetch.outputs.short }}"; then
             echo "conflicted=false" >> "$GITHUB_OUTPUT"
           else
             {
@@ -102,49 +102,55 @@ jobs:
         run: |
           git push --force origin "$SYNC_BRANCH"
 
-          if gh pr list --head "$SYNC_BRANCH" --state open --json number --jq 'length' | grep -qv '^0$'; then
+          COMPARE_URL="${{ github.server_url }}/${{ github.repository }}/compare/dev/4.0.0...$SYNC_BRANCH?expand=1"
+          PR_HEAD="${{ github.repository_owner }}:$SYNC_BRANCH"
+
+          if [ "$(gh pr list --head "$PR_HEAD" --state open --json number --jq 'length')" != "0" ]; then
             echo "Pull request already open, branch updated in place."
             exit 0
           fi
 
-          SUMMARY="Merges [\`$UPSTREAM_REF\`](https://github.com/GemstoneGG/Velocity-CTD/commits/$UPSTREAM_REF) at \`${{ steps.fetch.outputs.sha }}\`, ${{ steps.fetch.outputs.behind }} commits ahead of the default branch.
+          SUMMARY="Merges [\`$UPSTREAM_REF\`](https://github.com/PaperMC/Velocity/commits/$UPSTREAM_REF) at \`${{ steps.fetch.outputs.sha }}\`, ${{ steps.fetch.outputs.behind }} commits ahead of \`dev/4.0.0\`.
 
           The merge applied cleanly and \`./gradlew build\` passed on the result.
 
-          Worth a look before merging: ApiaryProxy carries branding, the \`remove-reconfig\` and \`keep-client-world-on-switch\` options, and its own workflows. A clean merge does not prove upstream did not change behaviour underneath those."
+          Worth a look before merging: Continuum carries branding, the \`remove-reconfig\` and \`keep-client-world-on-switch\` options, compression observability, and its own workflows. A clean merge does not prove upstream did not change behaviour underneath those."
 
           if gh pr create \
               --base dev/4.0.0 \
               --head "$SYNC_BRANCH" \
-              --title "Merge Velocity-CTD $UPSTREAM_REF (${{ steps.fetch.outputs.short }})" \
+              --title "Merge PaperMC Velocity $UPSTREAM_REF (${{ steps.fetch.outputs.short }})" \
               --body "$SUMMARY"; then
             exit 0
           fi
 
-          # Creating pull requests from Actions is off for this account, so point at the branch
-          # instead. Enable it under Settings -> Actions -> General, "Allow GitHub Actions to create
-          # and approve pull requests", and this falls back to opening the pull request itself.
-          echo "::warning::Could not open a pull request; opening an issue with a compare link instead."
+          echo "::warning::Could not open a pull request; the merge is on \`$SYNC_BRANCH\`."
+          echo "Compare: $COMPARE_URL"
 
-          TITLE="Upstream sync: Velocity-CTD $UPSTREAM_REF ready to merge"
+          TITLE="Upstream sync: PaperMC Velocity $UPSTREAM_REF ready to merge"
           BODY="$SUMMARY
 
-          Actions is not allowed to open pull requests on this account, so the merge is waiting on the \`$SYNC_BRANCH\` branch:
+          The merge is waiting on the \`$SYNC_BRANCH\` branch:
 
-          ${{ github.server_url }}/${{ github.repository }}/compare/dev/4.0.0...$SYNC_BRANCH?expand=1
+          $COMPARE_URL
 
           Turning on *Settings -> Actions -> General -> Allow GitHub Actions to create and approve pull requests* lets this open the pull request directly."
 
-          EXISTING=$(gh issue list --label "$ISSUE_LABEL" --state open --json number,title \
-            --jq "map(select(.title == \"$TITLE\")) | .[0].number // empty")
-
-          if [ -n "$EXISTING" ]; then
-            gh issue comment "$EXISTING" --body "$BODY"
-          else
-            gh label create "$ISSUE_LABEL" --color ededed --description "Automated Velocity-CTD sync" || true
-            gh issue create --title "$TITLE" --label "$ISSUE_LABEL" --body "$BODY" \
-              || gh issue create --title "$TITLE" --body "$BODY"
+          if EXISTING=$(gh issue list --label "$ISSUE_LABEL" --state open --json number,title \
+              --jq "map(select(.title == \"$TITLE\")) | .[0].number // empty"); then
+            if [ -n "$EXISTING" ]; then
+              gh issue comment "$EXISTING" --body "$BODY" && exit 0
+            else
+              gh label create "$ISSUE_LABEL" --color ededed --description "Automated PaperMC Velocity sync" || true
+              (gh issue create --title "$TITLE" --label "$ISSUE_LABEL" --body "$BODY" \
+                || gh issue create --title "$TITLE" --body "$BODY") && exit 0
+            fi
           fi
+
+          # Issues may be disabled, or Actions may be barred from opening them. The branch is the
+          # deliverable either way; do not fail a successful merge and push.
+          echo "::warning::Could not open an issue either. Open the compare URL to finish the sync: $COMPARE_URL"
+          exit 0
 
       - name: Report a problem
         if: |
@@ -154,7 +160,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [ "${{ steps.merge.outputs.conflicted }}" = "true" ]; then
-            TITLE="Upstream sync: conflicts merging Velocity-CTD $UPSTREAM_REF"
+            TITLE="Upstream sync: conflicts merging PaperMC Velocity $UPSTREAM_REF"
             BODY="Merging \`$UPSTREAM_REF\` at \`${{ steps.fetch.outputs.sha }}\` hit conflicts, so nothing was pushed.
 
           Conflicting files:
@@ -164,25 +170,26 @@ jobs:
 
           Resolve locally:
           \`\`\`bash
-          git remote add ctd $UPSTREAM_URL   # once
-          git fetch ctd $UPSTREAM_REF
+          git remote add papermc $UPSTREAM_URL   # once
+          git fetch papermc $UPSTREAM_REF
           git checkout -b $SYNC_BRANCH dev/4.0.0
           git merge FETCH_HEAD
           \`\`\`"
           else
-            TITLE="Upstream sync: build failed after merging Velocity-CTD $UPSTREAM_REF"
+            TITLE="Upstream sync: build failed after merging PaperMC Velocity $UPSTREAM_REF"
             BODY="\`$UPSTREAM_REF\` at \`${{ steps.fetch.outputs.sha }}\` merged cleanly but \`./gradlew build\` failed on the result, so no pull request was opened.
 
           See [the run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for the compiler output."
           fi
 
           EXISTING=$(gh issue list --label "$ISSUE_LABEL" --state open --json number,title \
-            --jq "map(select(.title == \"$TITLE\")) | .[0].number // empty")
+            --jq "map(select(.title == \"$TITLE\")) | .[0].number // empty" || true)
 
           if [ -n "$EXISTING" ]; then
-            gh issue comment "$EXISTING" --body "$BODY"
+            gh issue comment "$EXISTING" --body "$BODY" || true
           else
-            gh label create "$ISSUE_LABEL" --color ededed --description "Automated Velocity-CTD sync" || true
+            gh label create "$ISSUE_LABEL" --color ededed --description "Automated PaperMC Velocity sync" || true
             gh issue create --title "$TITLE" --label "$ISSUE_LABEL" --body "$BODY" \
-              || gh issue create --title "$TITLE" --body "$BODY"
+              || gh issue create --title "$TITLE" --body "$BODY" \
+              || echo "::error::$TITLE"
           fi
