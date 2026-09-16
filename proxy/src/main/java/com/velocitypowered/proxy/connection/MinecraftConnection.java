@@ -27,6 +27,7 @@ import static com.velocitypowered.proxy.network.Connections.MINECRAFT_DECODER;
 import static com.velocitypowered.proxy.network.Connections.MINECRAFT_ENCODER;
 
 import com.google.common.base.Preconditions;
+import com.velocitypowered.api.event.connection.ConnectionDroppedEvent;
 import com.velocitypowered.api.network.ProtocolVersion;
 import com.velocitypowered.natives.compression.VelocityCompressor;
 import com.velocitypowered.natives.encryption.VelocityCipher;
@@ -134,6 +135,7 @@ public class MinecraftConnection extends ChannelInboundHandlerAdapter {
     if (association != null && !knownDisconnect
         && !(activeSessionHandler instanceof StatusSessionHandler)
         && server.getConfiguration().isLogPlayerConnections()) {
+      server.getEventManager().fireAndForget(new ConnectionDroppedEvent(remoteAddress));
       logger.info("{} has disconnected", association);
     }
   }
